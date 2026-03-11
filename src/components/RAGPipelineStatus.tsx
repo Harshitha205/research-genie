@@ -72,7 +72,7 @@ export function RAGPipelineStatus({ pipeline, isLoading, stage }: Props) {
           })}
         </div>
 
-        {pipeline && stage !== "idle" && (
+        {pipeline && (
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
             {pipeline.hasContext ? (
               <span className="flex items-center gap-1 text-primary">
