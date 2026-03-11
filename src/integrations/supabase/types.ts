@@ -14,13 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      document_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          search_vector: unknown
+          token_count: number
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          search_vector?: unknown
+          token_count?: number
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          search_vector?: unknown
+          token_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number
+          id: string
+          preview: string | null
+          total_chunks: number
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size: number
+          id?: string
+          preview?: string | null
+          total_chunks?: number
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number
+          id?: string
+          preview?: string | null
+          total_chunks?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_chunks: {
+        Args: { match_limit?: number; query_text: string }
+        Returns: {
+          chunk_index: number
+          content: string
+          document_id: string
+          file_name: string
+          id: string
+          rank: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
