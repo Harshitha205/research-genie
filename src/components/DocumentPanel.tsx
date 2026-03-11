@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Upload, FileText, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, FileText, X, Loader2, ChevronDown, ChevronUp, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { processDocument, type ProcessedDocument } from "@/lib/document-processor";
@@ -33,7 +33,7 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
     try {
       const doc = await processDocument(file);
       onDocumentProcessed(doc);
-      toast.success(`"${doc.fileName}" processed — ${doc.totalChunks} chunks extracted`);
+      toast.success(`"${doc.fileName}" ingested — ${doc.totalChunks} chunks stored in vector DB`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to process document");
     } finally {
@@ -52,11 +52,11 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
     <div className="h-full flex flex-col bg-card border-l border-border">
       <div className="p-4 border-b border-border">
         <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
-          Documents
+          <Database className="w-4 h-4 text-primary" />
+          Document Ingestion
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Upload research documents for AI context
+          Upload documents → chunked → stored in vector DB
         </p>
       </div>
 
@@ -86,22 +86,33 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
             <Upload className="w-6 h-6 mx-auto text-muted-foreground" />
           )}
           <p className="text-xs text-muted-foreground mt-2">
-            {isProcessing ? "Processing..." : "Drop files or click to upload"}
+            {isProcessing ? "Extracting & chunking..." : "Drop files or click to upload"}
           </p>
-          <p className="text-xs text-muted-foreground/60 mt-1">PDF, TXT, MD, CSV</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">PDF, TXT, MD, CSV · Max 20MB</p>
+        </div>
+      </div>
+
+      {/* Pipeline info */}
+      <div className="px-4 pb-3">
+        <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">Ingestion Pipeline:</p>
+          <p>1. Extract text from document</p>
+          <p>2. Split into 500–1000 token chunks</p>
+          <p>3. Store with full-text search index</p>
+          <p>4. Auto-retrieved during chat queries</p>
         </div>
       </div>
 
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-2 pb-4">
           {documents.map((doc, idx) => (
-            <div key={idx} className="bg-secondary/50 rounded-lg border border-border">
+            <div key={doc.id} className="bg-secondary/50 rounded-lg border border-border">
               <div className="flex items-center gap-2 p-3">
                 <FileText className="w-4 h-4 text-primary flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{doc.fileName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {doc.totalChunks} chunks · {(doc.fileSize / 1024).toFixed(1)}KB
+                    {doc.totalChunks} chunks · {(doc.fileSize / 1024).toFixed(1)}KB · Indexed ✓
                   </p>
                 </div>
                 <Button

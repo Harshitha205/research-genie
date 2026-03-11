@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,17 +15,42 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    // Search for relevant chunks based on the last user message
+    let relevantContext = documentContext || "";
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    
+    if (lastUserMsg) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      const { data: chunks } = await supabase.rpc("search_chunks", {
+        query_text: lastUserMsg.content,
+        match_limit: 5,
+      });
+
+      if (chunks && chunks.length > 0) {
+        const chunkContext = chunks.map((c: any) =>
+          `[Source: ${c.file_name}, Chunk ${c.chunk_index + 1}]\n${c.content}`
+        ).join("\n\n---\n\n");
+        relevantContext = relevantContext
+          ? `${relevantContext}\n\n--- Retrieved from vector database ---\n\n${chunkContext}`
+          : chunkContext;
+      }
+    }
+
     const systemPrompt = `You are an expert AI research assistant. Your role is to help users with research questions by providing thorough, well-sourced answers.
 
 When answering:
 1. Provide clear, structured answers with headings and bullet points when appropriate
 2. Always cite sources when making claims - use numbered references like [1], [2], etc.
 3. At the end of your response, include a "## Sources" section listing all referenced sources
-4. If the user has provided document context, reference specific parts of those documents
+4. If document context is provided, reference specific parts of those documents with the source file name
 5. Be honest about uncertainty - if you're not sure, say so
 6. Suggest follow-up research directions when relevant
 
-${documentContext ? `The user has uploaded the following document content for context:\n\n${documentContext}` : ""}`;
+${relevantContext ? `The following document chunks were retrieved as relevant context:\n\n${relevantContext}` : ""}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
