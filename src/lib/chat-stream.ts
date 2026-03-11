@@ -1,16 +1,25 @@
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export interface RetrievedSource {
+  index: number;
+  sourceName: string;
+  sourceType: "file" | "url";
+  sourceUrl: string | null;
+  location: string;
+  relevance: number;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export async function streamChat({
   messages,
-  documentContext,
+  onSources,
   onDelta,
   onDone,
   onError,
 }: {
   messages: ChatMessage[];
-  documentContext?: string;
+  onSources: (sources: RetrievedSource[]) => void;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -22,7 +31,7 @@ export async function streamChat({
         "Content-Type": "application/json",
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
       },
-      body: JSON.stringify({ messages, documentContext }),
+      body: JSON.stringify({ messages }),
     });
 
     if (!resp.ok) {
@@ -37,12 +46,32 @@ export async function streamChat({
     const decoder = new TextDecoder();
     let buffer = "";
     let done = false;
+    let sourcesParsed = false;
 
     while (!done) {
       const { done: readerDone, value } = await reader.read();
       if (readerDone) break;
       buffer += decoder.decode(value, { stream: true });
 
+      // Parse source metadata header first
+      if (!sourcesParsed) {
+        const streamStartIdx = buffer.indexOf("---STREAM_START---\n");
+        if (streamStartIdx !== -1) {
+          const headerPart = buffer.slice(0, streamStartIdx);
+          buffer = buffer.slice(streamStartIdx + "---STREAM_START---\n".length);
+          sourcesParsed = true;
+          try {
+            const parsed = JSON.parse(headerPart.trim());
+            if (parsed.retrievedSources) {
+              onSources(parsed.retrievedSources);
+            }
+          } catch { /* ignore parse errors */ }
+        } else {
+          continue; // Wait for more data
+        }
+      }
+
+      // Process SSE lines
       let idx: number;
       while ((idx = buffer.indexOf("\n")) !== -1) {
         let line = buffer.slice(0, idx);

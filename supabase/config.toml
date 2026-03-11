@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.process-document]
 verify_jwt = false
+
+[functions.ingest-url]
+verify_jwt = false
+
+[functions.retrieve]
+verify_jwt = false

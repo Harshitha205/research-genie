@@ -62,6 +62,8 @@ export type Database = {
           file_size: number
           id: string
           preview: string | null
+          source_type: string
+          source_url: string | null
           total_chunks: number
         }
         Insert: {
@@ -70,6 +72,8 @@ export type Database = {
           file_size: number
           id?: string
           preview?: string | null
+          source_type?: string
+          source_url?: string | null
           total_chunks?: number
         }
         Update: {
@@ -78,6 +82,8 @@ export type Database = {
           file_size?: number
           id?: string
           preview?: string | null
+          source_type?: string
+          source_url?: string | null
           total_chunks?: number
         }
         Relationships: []
@@ -96,6 +102,8 @@ export type Database = {
           file_name: string
           id: string
           rank: number
+          source_type: string
+          source_url: string
         }[]
       }
     }
