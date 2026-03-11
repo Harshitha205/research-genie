@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Sparkles, PanelRightOpen, PanelRightClose, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "@/components/ChatMessage";
+import { SourcesPanel } from "@/components/SourcesPanel";
 import { DocumentPanel } from "@/components/DocumentPanel";
-import { streamChat, type ChatMessage as ChatMsg } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource } from "@/lib/chat-stream";
 import { type ProcessedDocument } from "@/lib/document-processor";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,15 +23,14 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [showDocs, setShowDocs] = useState(false);
   const [documents, setDocuments] = useState<ProcessedDocument[]>([]);
+  const [latestSources, setLatestSources] = useState<RetrievedSource[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
-
-  // Document context is now auto-retrieved from the vector DB by the chat edge function
+  }, [messages, latestSources]);
 
   const send = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -39,6 +38,7 @@ export default function Index() {
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
+    setLatestSources([]);
 
     let assistantContent = "";
     const upsert = (chunk: string) => {
@@ -54,7 +54,7 @@ export default function Index() {
 
     await streamChat({
       messages: [...messages, userMsg],
-      documentContext: undefined,
+      onSources: (sources) => setLatestSources(sources),
       onDelta: upsert,
       onDone: () => setIsLoading(false),
       onError: (err) => {
@@ -71,6 +71,11 @@ export default function Index() {
     }
   };
 
+  const handleClear = () => {
+    setMessages([]);
+    setLatestSources([]);
+  };
+
   return (
     <div className="flex h-screen bg-background">
       {/* Main Chat Area */}
@@ -83,7 +88,7 @@ export default function Index() {
             </div>
             <div>
               <h1 className="text-sm font-semibold text-foreground">Research Assistant</h1>
-              <p className="text-xs text-muted-foreground">AI-powered research workspace</p>
+              <p className="text-xs text-muted-foreground">Multisource retrieval · AI-powered research</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -91,7 +96,7 @@ export default function Index() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setMessages([])}
+                onClick={handleClear}
                 className="text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="w-4 h-4 mr-1" />
@@ -105,7 +110,7 @@ export default function Index() {
               className="gap-1.5"
             >
               {showDocs ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
-              Docs {documents.length > 0 && `(${documents.length})`}
+              Sources {documents.length > 0 && `(${documents.length})`}
             </Button>
           </div>
         </header>
@@ -127,7 +132,7 @@ export default function Index() {
                     What would you like to research?
                   </h2>
                   <p className="text-sm text-muted-foreground mb-8">
-                    Ask research questions, upload documents for context, and get AI-powered answers with sources.
+                    Upload documents, add web URLs, and ask questions. The system retrieves the top 5 most relevant chunks across all sources.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {SUGGESTIONS.map((s) => (
@@ -143,7 +148,7 @@ export default function Index() {
                 </motion.div>
               </div>
             ) : (
-              <div className="max-w-3xl mx-auto py-4">
+              <div className="py-4">
                 <AnimatePresence>
                   {messages.map((msg, i) => (
                     <motion.div
@@ -152,13 +157,26 @@ export default function Index() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <ChatMessage
-                        message={msg}
-                        isStreaming={isLoading && i === messages.length - 1 && msg.role === "assistant"}
-                      />
+                      <div className="max-w-3xl mx-auto">
+                        <ChatMessage
+                          message={msg}
+                          isStreaming={isLoading && i === messages.length - 1 && msg.role === "assistant"}
+                        />
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
+
+                {/* Show retrieved sources after the last assistant message */}
+                {latestSources.length > 0 && !isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                  >
+                    <SourcesPanel sources={latestSources} />
+                  </motion.div>
+                )}
               </div>
             )}
           </div>
@@ -193,7 +211,7 @@ export default function Index() {
         {showDocs && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 320, opacity: 1 }}
+            animate={{ width: 340, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="overflow-hidden"

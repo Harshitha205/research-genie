@@ -6,6 +6,8 @@ export interface ProcessedDocument {
   fileSize: number;
   totalChunks: number;
   preview: string;
+  sourceType?: "file" | "url";
+  sourceUrl?: string;
 }
 
 export async function processDocument(file: File): Promise<ProcessedDocument> {
