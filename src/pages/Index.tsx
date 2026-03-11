@@ -54,7 +54,7 @@ export default function Index() {
 
     await streamChat({
       messages: [...messages, userMsg],
-      documentContext,
+      documentContext: undefined,
       onDelta: upsert,
       onDone: () => setIsLoading(false),
       onError: (err) => {
