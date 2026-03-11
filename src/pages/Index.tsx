@@ -6,7 +6,7 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { RAGPipelineStatus } from "@/components/RAGPipelineStatus";
 import { DocumentPanel } from "@/components/DocumentPanel";
-import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource, type PipelineInfo, type CriticInfo } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource, type PipelineInfo, type CriticInfo, type VerifierInfo } from "@/lib/chat-stream";
 import { type ProcessedDocument } from "@/lib/document-processor";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
