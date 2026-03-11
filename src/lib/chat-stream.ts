@@ -15,12 +15,33 @@ export interface PipelineInfo {
   hasContext: boolean;
 }
 
+export interface CriticEvaluation {
+  issues_found: boolean;
+  evaluation: {
+    logical_consistency: { score: number; note: string };
+    answers_question: { score: number; note: string };
+    clarity: { score: number; note: string };
+    completeness: { score: number; note: string };
+    citation_accuracy: { score: number; note: string };
+  };
+  overall_score: number;
+  summary: string;
+}
+
+export interface CriticInfo {
+  evaluation: CriticEvaluation | null;
+  wasImproved: boolean;
+  originalLength: number;
+  finalLength: number;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export async function streamChat({
   messages,
   onSources,
   onPipeline,
+  onCritic,
   onDelta,
   onDone,
   onError,
@@ -28,6 +49,7 @@ export async function streamChat({
   messages: ChatMessage[];
   onSources: (sources: RetrievedSource[]) => void;
   onPipeline: (info: PipelineInfo) => void;
+  onCritic: (info: CriticInfo) => void;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -71,6 +93,7 @@ export async function streamChat({
             const parsed = JSON.parse(headerPart.trim());
             if (parsed.retrievedSources) onSources(parsed.retrievedSources);
             if (parsed.pipeline) onPipeline(parsed.pipeline);
+            if (parsed.critic) onCritic(parsed.critic);
           } catch { /* ignore */ }
         } else {
           continue;
