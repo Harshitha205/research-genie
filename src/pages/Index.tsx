@@ -27,7 +27,8 @@ export default function Index() {
   const [latestSources, setLatestSources] = useState<RetrievedSource[]>([]);
   const [pipelineInfo, setPipelineInfo] = useState<PipelineInfo | null>(null);
   const [criticInfo, setCriticInfo] = useState<CriticInfo | null>(null);
-  const [pipelineStage, setPipelineStage] = useState<"idle" | "retrieving" | "generating" | "critiquing" | "done">("idle");
+  const [verifierInfo, setVerifierInfo] = useState<VerifierInfo | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<"idle" | "retrieving" | "generating" | "critiquing" | "verifying" | "done">("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
