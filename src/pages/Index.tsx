@@ -46,7 +46,7 @@ export default function Index() {
     setLatestSources([]);
     setPipelineInfo(null);
     setCriticInfo(null);
-    setPipelineStage("retrieving");
+    setVerifierInfo(null);
 
     let assistantContent = "";
     const upsert = (chunk: string) => {
