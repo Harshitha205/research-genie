@@ -179,7 +179,7 @@ export default function Index() {
                 {/* Pipeline + Critic Status */}
                 {pipelineStage !== "idle" && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <RAGPipelineStatus pipeline={pipelineInfo} critic={criticInfo} isLoading={isLoading} stage={pipelineStage} />
+                    <RAGPipelineStatus pipeline={pipelineInfo} critic={criticInfo} verifier={verifierInfo} isLoading={isLoading} stage={pipelineStage} />
                   </motion.div>
                 )}
 
