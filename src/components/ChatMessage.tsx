@@ -12,17 +12,17 @@ export function ChatMessage({ message, isStreaming }: Props) {
   const isUser = message.role === "user";
 
   return (
-    <div className={cn("flex gap-3 py-4 px-4", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex gap-2.5 py-2 px-4", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Bot className="w-4 h-4 text-primary" />
+        <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-primary/15 to-accent/10 flex items-center justify-center mt-0.5">
+          <Bot className="w-3.5 h-3.5 text-primary" />
         </div>
       )}
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-3",
+          "max-w-[80%] rounded-xl px-3.5 py-2.5",
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground shadow-sm"
             : "bg-card border border-border shadow-sm"
         )}
       >
@@ -32,14 +32,14 @@ export function ChatMessage({ message, isStreaming }: Props) {
           <div className="prose text-sm text-card-foreground">
             <ReactMarkdown>{message.content}</ReactMarkdown>
             {isStreaming && (
-              <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse ml-0.5 rounded-sm" />
+              <span className="inline-block w-1.5 h-4 bg-primary/50 animate-pulse-soft ml-0.5 rounded-sm align-middle" />
             )}
           </div>
         )}
       </div>
       {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
-          <User className="w-4 h-4 text-secondary-foreground" />
+        <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-secondary flex items-center justify-center mt-0.5">
+          <User className="w-3.5 h-3.5 text-secondary-foreground" />
         </div>
       )}
     </div>

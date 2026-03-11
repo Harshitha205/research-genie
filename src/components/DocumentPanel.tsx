@@ -37,7 +37,7 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
     try {
       const doc = await processDocument(file);
       onDocumentProcessed({ ...doc, sourceType: "file" });
-      toast.success(`"${doc.fileName}" ingested — ${doc.totalChunks} chunks stored`);
+      toast.success(`"${doc.fileName}" ingested — ${doc.totalChunks} chunks`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to process document");
     } finally {
@@ -59,7 +59,7 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
         sourceType: "url",
         sourceUrl: doc.sourceUrl,
       });
-      toast.success(`"${doc.fileName}" ingested — ${doc.totalChunks} chunks stored`);
+      toast.success(`"${doc.fileName}" ingested — ${doc.totalChunks} chunks`);
       setUrlInput("");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to ingest URL");
@@ -76,39 +76,39 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
   }, [handleFile]);
 
   return (
-    <div className="h-full flex flex-col bg-card border-l border-border">
-      <div className="p-4 border-b border-border">
-        <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
-          <Database className="w-4 h-4 text-primary" />
+    <div className="h-full flex flex-col">
+      <div className="p-3 border-b border-border">
+        <h2 className="font-semibold text-xs text-foreground flex items-center gap-1.5 tracking-tight">
+          <Database className="w-3.5 h-3.5 text-primary" />
           Knowledge Sources
         </h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          Add documents & URLs for multisource retrieval
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          Upload documents or add URLs
         </p>
       </div>
 
       <Tabs defaultValue="file" className="flex-1 flex flex-col">
-        <div className="px-4 pt-3">
-          <TabsList className="w-full">
-            <TabsTrigger value="file" className="flex-1 gap-1.5 text-xs">
-              <FileText className="w-3.5 h-3.5" />
+        <div className="px-3 pt-2">
+          <TabsList className="w-full h-7">
+            <TabsTrigger value="file" className="flex-1 gap-1 text-[10px] h-6">
+              <FileText className="w-3 h-3" />
               Files
             </TabsTrigger>
-            <TabsTrigger value="url" className="flex-1 gap-1.5 text-xs">
-              <Globe className="w-3.5 h-3.5" />
-              Web URLs
+            <TabsTrigger value="url" className="flex-1 gap-1 text-[10px] h-6">
+              <Globe className="w-3 h-3" />
+              URLs
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="file" className="flex-1 flex flex-col mt-0 px-4 pt-3">
+        <TabsContent value="file" className="flex-1 flex flex-col mt-0 px-3 pt-2">
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={onDrop}
             className={cn(
-              "border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer",
-              isDragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+              "border border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer",
+              isDragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
             )}
             onClick={() => {
               const input = document.createElement("input");
@@ -122,25 +122,25 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
             }}
           >
             {isProcessing ? (
-              <Loader2 className="w-6 h-6 mx-auto text-primary animate-spin" />
+              <Loader2 className="w-5 h-5 mx-auto text-primary animate-spin" />
             ) : (
-              <Upload className="w-6 h-6 mx-auto text-muted-foreground" />
+              <Upload className="w-5 h-5 mx-auto text-muted-foreground" />
             )}
-            <p className="text-xs text-muted-foreground mt-2">
-              {isProcessing ? "Extracting & chunking..." : "Drop files or click to upload"}
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {isProcessing ? "Processing..." : "Drop or click to upload"}
             </p>
-            <p className="text-xs text-muted-foreground/60 mt-1">PDF, TXT, MD, CSV · Max 20MB</p>
+            <p className="text-[9px] text-muted-foreground/50 mt-0.5">PDF, TXT, MD, CSV · Max 20MB</p>
           </div>
         </TabsContent>
 
-        <TabsContent value="url" className="flex-1 flex flex-col mt-0 px-4 pt-3">
-          <div className="space-y-2">
-            <div className="flex gap-2">
+        <TabsContent value="url" className="flex-1 flex flex-col mt-0 px-3 pt-2">
+          <div className="space-y-1.5">
+            <div className="flex gap-1.5">
               <Input
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://example.com/article"
-                className="text-xs h-9"
+                placeholder="https://example.com"
+                className="text-[11px] h-8"
                 disabled={isProcessing}
                 onKeyDown={(e) => e.key === "Enter" && handleUrl()}
               />
@@ -148,71 +148,64 @@ export function DocumentPanel({ documents, onDocumentProcessed, onRemoveDocument
                 size="sm"
                 onClick={handleUrl}
                 disabled={!urlInput.trim() || isProcessing}
-                className="h-9 px-3"
+                className="h-8 w-8 p-0"
               >
-                {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link className="w-3.5 h-3.5" />}
+                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link className="w-3 h-3" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Paste a web URL to scrape, chunk, and index its content for retrieval.
+            <p className="text-[9px] text-muted-foreground">
+              Scrape, chunk, and index web content
             </p>
           </div>
         </TabsContent>
 
-        {/* Pipeline info */}
-        <div className="px-4 py-3">
-          <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Multisource Retrieval Pipeline:</p>
-            <p>1. Ingest from files or web URLs</p>
-            <p>2. Extract text & split into 500–1000 token chunks</p>
-            <p>3. Index with full-text search (pgvector)</p>
-            <p>4. Semantic search retrieves top 5 relevant chunks</p>
-            <p>5. Sources displayed with name, type & location</p>
-          </div>
-        </div>
-
         {/* Document list */}
-        <ScrollArea className="flex-1 px-4">
-          <div className="space-y-2 pb-4">
+        <ScrollArea className="flex-1 px-3 mt-2">
+          <div className="space-y-1 pb-3">
+            {documents.length === 0 && (
+              <div className="text-center py-6">
+                <p className="text-[10px] text-muted-foreground">No sources added yet</p>
+              </div>
+            )}
             {documents.map((doc, idx) => (
-              <div key={doc.id} className="bg-secondary/50 rounded-lg border border-border">
-                <div className="flex items-center gap-2 p-3">
+              <div key={doc.id} className="bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center gap-1.5 p-2">
                   {doc.sourceType === "url" ? (
-                    <Globe className="w-4 h-4 text-accent flex-shrink-0" />
+                    <Globe className="w-3 h-3 text-accent flex-shrink-0" />
                   ) : (
-                    <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                    <FileText className="w-3 h-3 text-primary flex-shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{doc.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {doc.totalChunks} chunks · {(doc.fileSize / 1024).toFixed(1)}KB · {doc.sourceType === "url" ? "Web" : "File"} · Indexed ✓
+                    <p className="text-[10px] font-medium truncate text-foreground">{doc.fileName}</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      {doc.totalChunks} chunks · {(doc.fileSize / 1024).toFixed(0)}KB
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="h-5 w-5"
                     onClick={() => setExpandedDoc(expandedDoc === idx ? null : idx)}
                   >
-                    {expandedDoc === idx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {expandedDoc === idx ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    className="h-5 w-5 text-muted-foreground hover:text-destructive"
                     onClick={() => onRemoveDocument(idx)}
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-2.5 h-2.5" />
                   </Button>
                 </div>
                 {expandedDoc === idx && (
-                  <div className="px-3 pb-3 space-y-1">
+                  <div className="px-2 pb-2 space-y-1">
                     {doc.sourceUrl && (
-                      <a href={doc.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block">
+                      <a href={doc.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary hover:underline truncate block">
                         {doc.sourceUrl}
                       </a>
                     )}
-                    <p className="text-xs text-muted-foreground bg-muted p-2 rounded font-mono leading-relaxed max-h-32 overflow-auto">
+                    <p className="text-[9px] text-muted-foreground bg-muted p-1.5 rounded font-mono leading-relaxed max-h-24 overflow-auto">
                       {doc.preview}...
                     </p>
                   </div>
