@@ -31,9 +31,7 @@ export default function Index() {
     }
   }, [messages]);
 
-  const documentContext = documents.length > 0
-    ? documents.map(d => `--- Document: ${d.fileName} ---\n${d.chunks.slice(0, 5).join("\n\n")}`).join("\n\n")
-    : undefined;
+  // Document context is now auto-retrieved from the vector DB by the chat edge function
 
   const send = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -56,7 +54,7 @@ export default function Index() {
 
     await streamChat({
       messages: [...messages, userMsg],
-      documentContext,
+      documentContext: undefined,
       onDelta: upsert,
       onDone: () => setIsLoading(false),
       onError: (err) => {

@@ -1,10 +1,10 @@
 const PROCESS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-document`;
 
 export interface ProcessedDocument {
+  id: string;
   fileName: string;
   fileSize: number;
   totalChunks: number;
-  chunks: string[];
   preview: string;
 }
 
