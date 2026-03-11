@@ -105,6 +105,7 @@ export default function Index() {
     setLatestSources([]);
     setPipelineInfo(null);
     setCriticInfo(null);
+    setVerifierInfo(null);
     setPipelineStage("idle");
   };
 
