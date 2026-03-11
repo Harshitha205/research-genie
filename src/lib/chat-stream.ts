@@ -9,17 +9,25 @@ export interface RetrievedSource {
   relevance: number;
 }
 
+export interface PipelineInfo {
+  query: string;
+  chunksRetrieved: number;
+  hasContext: boolean;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export async function streamChat({
   messages,
   onSources,
+  onPipeline,
   onDelta,
   onDone,
   onError,
 }: {
   messages: ChatMessage[];
   onSources: (sources: RetrievedSource[]) => void;
+  onPipeline: (info: PipelineInfo) => void;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -53,7 +61,6 @@ export async function streamChat({
       if (readerDone) break;
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse source metadata header first
       if (!sourcesParsed) {
         const streamStartIdx = buffer.indexOf("---STREAM_START---\n");
         if (streamStartIdx !== -1) {
@@ -62,16 +69,14 @@ export async function streamChat({
           sourcesParsed = true;
           try {
             const parsed = JSON.parse(headerPart.trim());
-            if (parsed.retrievedSources) {
-              onSources(parsed.retrievedSources);
-            }
-          } catch { /* ignore parse errors */ }
+            if (parsed.retrievedSources) onSources(parsed.retrievedSources);
+            if (parsed.pipeline) onPipeline(parsed.pipeline);
+          } catch { /* ignore */ }
         } else {
-          continue; // Wait for more data
+          continue;
         }
       }
 
-      // Process SSE lines
       let idx: number;
       while ((idx = buffer.indexOf("\n")) !== -1) {
         let line = buffer.slice(0, idx);
@@ -94,7 +99,6 @@ export async function streamChat({
       }
     }
 
-    // Flush remaining
     if (buffer.trim()) {
       for (let raw of buffer.split("\n")) {
         if (!raw) continue;

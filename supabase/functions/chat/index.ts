@@ -15,55 +15,88 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Retrieve relevant chunks from all sources
+    // ── STEP 1: Accept user query ──
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-    let retrievedSources: any[] = [];
-    let contextBlock = "";
+    if (!lastUserMsg) throw new Error("No user message found");
 
-    if (lastUserMsg) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+    // ── STEP 2: Retrieve relevant document chunks from vector database ──
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-      const { data: chunks } = await supabase.rpc("search_chunks", {
-        query_text: lastUserMsg.content,
-        match_limit: 5,
-      });
+    const { data: chunks, error: searchError } = await supabase.rpc("search_chunks", {
+      query_text: lastUserMsg.content,
+      match_limit: 5,
+    });
 
-      if (chunks && chunks.length > 0) {
-        retrievedSources = chunks.map((c: any, i: number) => ({
+    if (searchError) {
+      console.error("Retrieval error:", searchError);
+    }
+
+    const hasContext = chunks && chunks.length > 0;
+
+    const retrievedSources = hasContext
+      ? chunks.map((c: any, i: number) => ({
           index: i + 1,
           sourceName: c.file_name,
           sourceType: c.source_type || "file",
           sourceUrl: c.source_url || null,
           location: `Chunk ${c.chunk_index + 1}`,
           relevance: c.rank,
-        }));
+        }))
+      : [];
 
-        contextBlock = chunks.map((c: any, i: number) => {
-          const sourceLabel = c.source_type === "url" 
-            ? `[${i + 1}] Web: ${c.file_name} (${c.source_url}), Chunk ${c.chunk_index + 1}`
-            : `[${i + 1}] Document: ${c.file_name}, Chunk ${c.chunk_index + 1}`;
-          return `${sourceLabel}\n${c.content}`;
-        }).join("\n\n---\n\n");
-      }
-    }
+    // ── STEP 3: Provide retrieved context to the LLM ──
+    const contextBlock = hasContext
+      ? chunks.map((c: any, i: number) => {
+          const type = c.source_type === "url" ? "Web" : "Document";
+          const url = c.source_url ? ` | URL: ${c.source_url}` : "";
+          return `### Source [${i + 1}]\n- **Name:** ${c.file_name}\n- **Type:** ${type}${url}\n- **Location:** Chunk ${c.chunk_index + 1}\n- **Relevance Score:** ${(c.rank * 100).toFixed(1)}%\n\n**Content:**\n${c.content}`;
+        }).join("\n\n---\n\n")
+      : "";
 
-    const systemPrompt = `You are an expert AI research assistant with access to a multisource retrieval system. Your knowledge comes from uploaded documents, web pages, and external sources stored in a vector database.
+    // ── STEP 4: Generate response based ONLY on retrieved context ──
+    const systemPrompt = `You are a Retrieval-Augmented Generation (RAG) research assistant. You MUST follow these rules strictly:
 
-When answering:
-1. Provide clear, structured answers using markdown
-2. Cite retrieved sources using their reference numbers [1], [2], etc.
-3. Always include a "## Sources Used" section at the end listing each source with its name, type, and location
-4. If retrieved context is relevant, synthesize information across multiple sources
-5. Be transparent about what comes from retrieved sources vs general knowledge
-6. Suggest follow-up queries or additional sources when relevant
+## CRITICAL RULES
+1. **Answer ONLY from the retrieved context below.** Do NOT use your pre-trained knowledge to answer factual questions.
+2. **If no relevant context is retrieved**, clearly state: "I could not find relevant information in the knowledge base. Please upload documents or add web URLs related to your question."
+3. **Never fabricate or hallucinate information** not present in the retrieved context.
 
-${contextBlock ? `## Retrieved Context (Top ${retrievedSources.length} matches)\n\n${contextBlock}` : "No relevant documents found in the knowledge base."}`;
+## CITATION RULES
+- Every claim MUST include an inline citation using the format [Source N] where N matches the source index.
+- When synthesizing across sources, cite all relevant sources: [Source 1][Source 3].
+- Direct quotes must use quotation marks with citation: "exact text" [Source 2].
 
-    // First, send source metadata as a JSON prefix before the stream
-    const sourceHeader = JSON.stringify({ retrievedSources }) + "\n---STREAM_START---\n";
+## RESPONSE FORMAT
+Structure your response as:
+
+1. **Answer** — A clear, well-structured answer with inline citations [Source N]
+2. **## Citations** — A numbered list of all sources used:
+   - [Source 1] Document/Web: name, location
+   - [Source 2] Document/Web: name, location
+3. **## Confidence** — State your confidence level:
+   - **High**: Multiple sources corroborate the answer
+   - **Medium**: Answer from a single source or partial match
+   - **Low**: Tangential relevance only
+   - **None**: No relevant context found
+
+${hasContext
+  ? `## RETRIEVED CONTEXT (${retrievedSources.length} chunks)\n\n${contextBlock}`
+  : "## NO CONTEXT RETRIEVED\nThe knowledge base returned no matching documents for this query."}`;
+
+    // Build metadata header
+    const pipelineMetadata = {
+      retrievedSources,
+      pipeline: {
+        query: lastUserMsg.content,
+        chunksRetrieved: retrievedSources.length,
+        hasContext,
+      },
+    };
+
+    const sourceHeader = JSON.stringify(pipelineMetadata) + "\n---STREAM_START---\n";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -99,16 +132,12 @@ ${contextBlock ? `## Retrieved Context (Top ${retrievedSources.length} matches)\
       });
     }
 
-    // Create a combined stream: source metadata + AI response
     const encoder = new TextEncoder();
     const aiBody = response.body!;
-    
+
     const combinedStream = new ReadableStream({
       async start(controller) {
-        // Send source metadata first
         controller.enqueue(encoder.encode(sourceHeader));
-        
-        // Then pipe AI stream
         const reader = aiBody.getReader();
         try {
           while (true) {
@@ -119,7 +148,7 @@ ${contextBlock ? `## Retrieved Context (Top ${retrievedSources.length} matches)\
         } finally {
           controller.close();
         }
-      }
+      },
     });
 
     return new Response(combinedStream, {
