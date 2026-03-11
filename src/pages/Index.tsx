@@ -68,15 +68,16 @@ export default function Index() {
       },
       onPipeline: (info) => {
         setPipelineInfo(info);
-        // The backend does retrieve → generate → critique before streaming,
-        // so when we get the metadata, all steps are done
         setPipelineStage("critiquing");
       },
       onCritic: (info) => {
         setCriticInfo(info);
+        setPipelineStage("verifying");
+      },
+      onVerifier: (info) => {
+        setVerifierInfo(info);
       },
       onDelta: (chunk) => {
-        // Once we receive the first token, the critique is done
         if (pipelineStage !== "done") setPipelineStage("done");
         upsert(chunk);
       },
