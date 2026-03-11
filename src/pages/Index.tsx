@@ -4,17 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatMessage } from "@/components/ChatMessage";
 import { SourcesPanel } from "@/components/SourcesPanel";
+import { RAGPipelineStatus } from "@/components/RAGPipelineStatus";
 import { DocumentPanel } from "@/components/DocumentPanel";
-import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource, type PipelineInfo } from "@/lib/chat-stream";
 import { type ProcessedDocument } from "@/lib/document-processor";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
 const SUGGESTIONS = [
-  "Summarize the key findings on climate change impacts",
-  "What are the latest advances in quantum computing?",
-  "Compare different machine learning architectures",
-  "Explain CRISPR gene editing technology",
+  "Summarize the key findings from uploaded documents",
+  "What are the main topics covered in my sources?",
+  "Compare viewpoints across different documents",
+  "Find specific claims with supporting evidence",
 ];
 
 export default function Index() {
@@ -24,13 +25,15 @@ export default function Index() {
   const [showDocs, setShowDocs] = useState(false);
   const [documents, setDocuments] = useState<ProcessedDocument[]>([]);
   const [latestSources, setLatestSources] = useState<RetrievedSource[]>([]);
+  const [pipelineInfo, setPipelineInfo] = useState<PipelineInfo | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<"idle" | "retrieving" | "generating" | "done">("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, latestSources]);
+  }, [messages, latestSources, pipelineStage]);
 
   const send = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -39,6 +42,8 @@ export default function Index() {
     setInput("");
     setIsLoading(true);
     setLatestSources([]);
+    setPipelineInfo(null);
+    setPipelineStage("retrieving");
 
     let assistantContent = "";
     const upsert = (chunk: string) => {
@@ -54,11 +59,19 @@ export default function Index() {
 
     await streamChat({
       messages: [...messages, userMsg],
-      onSources: (sources) => setLatestSources(sources),
+      onSources: (sources) => {
+        setLatestSources(sources);
+        setPipelineStage("generating");
+      },
+      onPipeline: (info) => setPipelineInfo(info),
       onDelta: upsert,
-      onDone: () => setIsLoading(false),
+      onDone: () => {
+        setIsLoading(false);
+        setPipelineStage("done");
+      },
       onError: (err) => {
         setIsLoading(false);
+        setPipelineStage("idle");
         toast.error(err);
       },
     });
@@ -74,11 +87,12 @@ export default function Index() {
   const handleClear = () => {
     setMessages([]);
     setLatestSources([]);
+    setPipelineInfo(null);
+    setPipelineStage("idle");
   };
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-3 border-b border-border bg-card/50 backdrop-blur-sm">
@@ -87,28 +101,17 @@ export default function Index() {
               <Sparkles className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-foreground">Research Assistant</h1>
-              <p className="text-xs text-muted-foreground">Multisource retrieval · AI-powered research</p>
+              <h1 className="text-sm font-semibold text-foreground">RAG Research Assistant</h1>
+              <p className="text-xs text-muted-foreground">Retrieval-Augmented Generation pipeline</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {messages.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClear}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="w-4 h-4 mr-1" />
-                Clear
+              <Button variant="ghost" size="sm" onClick={handleClear} className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="w-4 h-4 mr-1" /> Clear
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDocs(!showDocs)}
-              className="gap-1.5"
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowDocs(!showDocs)} className="gap-1.5">
               {showDocs ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
               Sources {documents.length > 0 && `(${documents.length})`}
             </Button>
@@ -120,20 +123,21 @@ export default function Index() {
           <div ref={scrollRef} className="h-full overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-4">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-center max-w-lg"
-                >
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-lg">
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
                     <Sparkles className="w-8 h-8 text-primary" />
                   </div>
-                  <h2 className="text-xl font-semibold text-foreground mb-2">
-                    What would you like to research?
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-8">
-                    Upload documents, add web URLs, and ask questions. The system retrieves the top 5 most relevant chunks across all sources.
+                  <h2 className="text-xl font-semibold text-foreground mb-2">RAG Research Assistant</h2>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Answers are generated <strong>only</strong> from your uploaded documents and web sources. Every claim includes citations to original sources.
                   </p>
+                  <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground mb-6 text-left space-y-1">
+                    <p className="font-semibold text-foreground">RAG Pipeline:</p>
+                    <p>1. Your query is received</p>
+                    <p>2. Top 5 relevant chunks retrieved via semantic search</p>
+                    <p>3. Retrieved context provided to the LLM</p>
+                    <p>4. Response generated <em>only</em> from retrieved context with citations</p>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {SUGGESTIONS.map((s) => (
                       <button
@@ -151,29 +155,24 @@ export default function Index() {
               <div className="py-4">
                 <AnimatePresence>
                   {messages.map((msg, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
+                    <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
                       <div className="max-w-3xl mx-auto">
-                        <ChatMessage
-                          message={msg}
-                          isStreaming={isLoading && i === messages.length - 1 && msg.role === "assistant"}
-                        />
+                        <ChatMessage message={msg} isStreaming={isLoading && i === messages.length - 1 && msg.role === "assistant"} />
                       </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
 
-                {/* Show retrieved sources after the last assistant message */}
+                {/* RAG Pipeline Status */}
+                {pipelineStage !== "idle" && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <RAGPipelineStatus pipeline={pipelineInfo} isLoading={isLoading} stage={pipelineStage} />
+                  </motion.div>
+                )}
+
+                {/* Sources */}
                 {latestSources.length > 0 && !isLoading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 }}
-                  >
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
                     <SourcesPanel sources={latestSources} />
                   </motion.div>
                 )}
@@ -189,17 +188,12 @@ export default function Index() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a research question..."
+              placeholder="Ask a research question (answers grounded in your sources)..."
               className="min-h-[44px] max-h-32 resize-none bg-background rounded-xl text-sm"
               rows={1}
               disabled={isLoading}
             />
-            <Button
-              onClick={() => send(input)}
-              disabled={!input.trim() || isLoading}
-              size="icon"
-              className="rounded-xl h-[44px] w-[44px] flex-shrink-0"
-            >
+            <Button onClick={() => send(input)} disabled={!input.trim() || isLoading} size="icon" className="rounded-xl h-[44px] w-[44px] flex-shrink-0">
               <Send className="w-4 h-4" />
             </Button>
           </div>
@@ -209,13 +203,7 @@ export default function Index() {
       {/* Document Panel */}
       <AnimatePresence>
         {showDocs && (
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 340, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
+          <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <DocumentPanel
               documents={documents}
               onDocumentProcessed={(doc) => setDocuments(prev => [...prev, doc])}
