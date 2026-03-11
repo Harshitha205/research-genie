@@ -35,6 +35,32 @@ export interface CriticInfo {
   finalLength: number;
 }
 
+export interface VerifierClaim {
+  claim: string;
+  status: "supported" | "partially_supported" | "unsupported";
+  source_ref: string | null;
+  note: string;
+}
+
+export interface VerifierEvaluation {
+  claims: VerifierClaim[];
+  total_claims: number;
+  supported: number;
+  partially_supported: number;
+  unsupported: number;
+  hallucination_detected: boolean;
+  confidence_score: number;
+  confidence_label: "High" | "Medium" | "Low" | "None";
+  summary: string;
+}
+
+export interface VerifierInfo {
+  evaluation: VerifierEvaluation | null;
+  wasVerified: boolean;
+  confidenceScore: number | null;
+  confidenceLabel: string | null;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export async function streamChat({
@@ -42,6 +68,7 @@ export async function streamChat({
   onSources,
   onPipeline,
   onCritic,
+  onVerifier,
   onDelta,
   onDone,
   onError,
@@ -50,6 +77,7 @@ export async function streamChat({
   onSources: (sources: RetrievedSource[]) => void;
   onPipeline: (info: PipelineInfo) => void;
   onCritic: (info: CriticInfo) => void;
+  onVerifier: (info: VerifierInfo) => void;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -94,6 +122,7 @@ export async function streamChat({
             if (parsed.retrievedSources) onSources(parsed.retrievedSources);
             if (parsed.pipeline) onPipeline(parsed.pipeline);
             if (parsed.critic) onCritic(parsed.critic);
+            if (parsed.verifier) onVerifier(parsed.verifier);
           } catch { /* ignore */ }
         } else {
           continue;

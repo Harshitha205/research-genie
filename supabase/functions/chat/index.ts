@@ -35,6 +35,14 @@ async function callAI(apiKey: string, messages: any[], stream = false) {
   return response;
 }
 
+function buildContextBlock(chunks: any[]) {
+  return chunks.map((c: any, i: number) => {
+    const type = c.source_type === "url" ? "Web" : "Document";
+    const url = c.source_url ? ` | URL: ${c.source_url}` : "";
+    return `### Source [${i + 1}]\n- **Name:** ${c.file_name}\n- **Type:** ${type}${url}\n- **Location:** Chunk ${c.chunk_index + 1}\n\n**Content:**\n${c.content}`;
+  }).join("\n\n---\n\n");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -43,11 +51,10 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // ── STEP 1: Accept user query ──
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     if (!lastUserMsg) throw new Error("No user message found");
 
-    // ── STEP 2: Retrieve relevant chunks ──
+    // ── STEP 1: Retrieve relevant chunks ──
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -73,15 +80,9 @@ serve(async (req) => {
         }))
       : [];
 
-    const contextBlock = hasContext
-      ? chunks.map((c: any, i: number) => {
-          const type = c.source_type === "url" ? "Web" : "Document";
-          const url = c.source_url ? ` | URL: ${c.source_url}` : "";
-          return `### Source [${i + 1}]\n- **Name:** ${c.file_name}\n- **Type:** ${type}${url}\n- **Location:** Chunk ${c.chunk_index + 1}\n\n**Content:**\n${c.content}`;
-        }).join("\n\n---\n\n")
-      : "";
+    const contextBlock = hasContext ? buildContextBlock(chunks) : "";
 
-    // ── STEP 3: Generate initial RAG response (non-streaming) ──
+    // ── STEP 2: Generate initial RAG response ──
     const ragSystemPrompt = `You are a RAG research assistant. Answer ONLY from the retrieved context. Never use pre-trained knowledge for factual claims.
 
 ## RULES
@@ -99,29 +100,21 @@ ${hasContext ? `## RETRIEVED CONTEXT (${retrievedSources.length} chunks)\n\n${co
     const initialData = await initialResponse.json();
     const initialAnswer = initialData.choices?.[0]?.message?.content || "";
 
-    // ── STEP 4: Critic Agent reviews the response ──
-    const criticPrompt = `You are a Critic Agent. Your job is to review an AI-generated research response and improve it.
+    // ── STEP 3: Critic Agent reviews the response ──
+    const criticPrompt = `You are a Critic Agent. Review the AI draft and improve it.
 
-## THE USER'S QUESTION
+## USER QUESTION
 ${lastUserMsg.content}
 
-## THE AI'S DRAFT RESPONSE
+## DRAFT RESPONSE
 ${initialAnswer}
 
-${hasContext ? `## THE RETRIEVED CONTEXT THAT WAS AVAILABLE\n\n${contextBlock}` : "No context was retrieved."}
+${hasContext ? `## RETRIEVED CONTEXT\n\n${contextBlock}` : "No context retrieved."}
 
-## YOUR TASK
-Evaluate the draft response on these criteria:
-
-1. **Logical Consistency** — Are there contradictions, non-sequiturs, or flawed reasoning?
-2. **Question Answering** — Does it actually answer the user's question fully and directly?
-3. **Clarity** — Is the language clear, well-organized, and easy to follow?
-4. **Completeness** — Does it use all relevant information from the retrieved context?
-5. **Citation Accuracy** — Are citations correctly placed and do they match the actual source content?
+## TASK
+Evaluate on: Logical Consistency, Question Answering, Clarity, Completeness, Citation Accuracy (each 1-5).
 
 ## OUTPUT FORMAT
-You MUST output your response in this exact format:
-
 ---CRITIQUE_START---
 {
   "issues_found": true/false,
@@ -133,49 +126,104 @@ You MUST output your response in this exact format:
     "citation_accuracy": { "score": 1-5, "note": "..." }
   },
   "overall_score": 1-5,
-  "summary": "Brief summary of issues found or quality assessment"
+  "summary": "..."
 }
 ---CRITIQUE_END---
 
-If issues_found is true OR overall_score < 4, then ALSO output an improved response after the critique block:
+If issues_found is true OR overall_score < 4, also output:
 
 ---IMPROVED_START---
-[Your improved, rewritten response here — follow the same format rules: citations, ## Citations section, ## Confidence level]
----IMPROVED_END---
-
-If the response is already good (overall_score >= 4 and no issues), do NOT output the improved section.`;
+[Improved response with citations, ## Citations, ## Confidence level]
+---IMPROVED_END---`;
 
     const criticResponse = await callAI(LOVABLE_API_KEY, [
-      { role: "system", content: "You are a meticulous Critic Agent that evaluates and improves AI responses." },
+      { role: "system", content: "You are a meticulous Critic Agent." },
       { role: "user", content: criticPrompt },
     ], false);
 
     const criticData = await criticResponse.json();
     const criticOutput = criticData.choices?.[0]?.message?.content || "";
 
-    // Parse critic output
     let criticEvaluation: any = null;
-    let finalAnswer = initialAnswer;
+    let postCriticAnswer = initialAnswer;
     let wasImproved = false;
 
-    // Extract critique JSON
     const critiqueMatch = criticOutput.match(/---CRITIQUE_START---\s*([\s\S]*?)\s*---CRITIQUE_END---/);
     if (critiqueMatch) {
-      try {
-        criticEvaluation = JSON.parse(critiqueMatch[1].trim());
-      } catch {
-        console.error("Failed to parse critic evaluation");
-      }
+      try { criticEvaluation = JSON.parse(critiqueMatch[1].trim()); } catch { console.error("Failed to parse critic evaluation"); }
     }
 
-    // Extract improved response if present
     const improvedMatch = criticOutput.match(/---IMPROVED_START---\s*([\s\S]*?)\s*---IMPROVED_END---/);
     if (improvedMatch && improvedMatch[1].trim().length > 50) {
-      finalAnswer = improvedMatch[1].trim();
+      postCriticAnswer = improvedMatch[1].trim();
       wasImproved = true;
     }
 
-    // ── STEP 5: Stream the final response to the client ──
+    // ── STEP 4: Verifier Agent validates claims against sources ──
+    const verifierPrompt = `You are a Verifier Agent. Your job is to validate every factual claim in the response against the retrieved source documents. Detect any hallucinated or unsupported claims.
+
+## USER QUESTION
+${lastUserMsg.content}
+
+## RESPONSE TO VERIFY
+${postCriticAnswer}
+
+${hasContext ? `## SOURCE DOCUMENTS\n\n${contextBlock}` : "No source documents available."}
+
+## YOUR TASK
+1. Extract each factual claim from the response.
+2. For each claim, check if it is SUPPORTED, PARTIALLY SUPPORTED, or UNSUPPORTED by the source documents.
+3. Flag any hallucinated content (claims not found in sources).
+4. If unsupported claims exist, rewrite the response removing or correcting them.
+5. Assign an overall confidence score.
+
+## OUTPUT FORMAT
+---VERIFY_START---
+{
+  "claims": [
+    { "claim": "...", "status": "supported|partially_supported|unsupported", "source_ref": "[Source N]" or null, "note": "..." }
+  ],
+  "total_claims": N,
+  "supported": N,
+  "partially_supported": N,
+  "unsupported": N,
+  "hallucination_detected": true/false,
+  "confidence_score": 0.0-1.0,
+  "confidence_label": "High|Medium|Low|None",
+  "summary": "Brief verification summary"
+}
+---VERIFY_END---
+
+If hallucination_detected is true OR confidence_score < 0.7, also output a corrected response:
+
+---VERIFIED_RESPONSE_START---
+[Corrected response with only supported claims, proper citations, ## Citations, ## Confidence level]
+---VERIFIED_RESPONSE_END---`;
+
+    const verifierResponse = await callAI(LOVABLE_API_KEY, [
+      { role: "system", content: "You are a rigorous Verifier Agent that validates AI responses against source documents." },
+      { role: "user", content: verifierPrompt },
+    ], false);
+
+    const verifierData = await verifierResponse.json();
+    const verifierOutput = verifierData.choices?.[0]?.message?.content || "";
+
+    let verifierEvaluation: any = null;
+    let finalAnswer = postCriticAnswer;
+    let wasVerified = false;
+
+    const verifyMatch = verifierOutput.match(/---VERIFY_START---\s*([\s\S]*?)\s*---VERIFY_END---/);
+    if (verifyMatch) {
+      try { verifierEvaluation = JSON.parse(verifyMatch[1].trim()); } catch { console.error("Failed to parse verifier evaluation"); }
+    }
+
+    const verifiedMatch = verifierOutput.match(/---VERIFIED_RESPONSE_START---\s*([\s\S]*?)\s*---VERIFIED_RESPONSE_END---/);
+    if (verifiedMatch && verifiedMatch[1].trim().length > 50) {
+      finalAnswer = verifiedMatch[1].trim();
+      wasVerified = true;
+    }
+
+    // ── STEP 5: Stream the final response ──
     const pipelineMetadata = {
       retrievedSources,
       pipeline: {
@@ -187,20 +235,23 @@ If the response is already good (overall_score >= 4 and no issues), do NOT outpu
         evaluation: criticEvaluation,
         wasImproved,
         originalLength: initialAnswer.length,
-        finalLength: finalAnswer.length,
+        finalLength: postCriticAnswer.length,
+      },
+      verifier: {
+        evaluation: verifierEvaluation,
+        wasVerified,
+        confidenceScore: verifierEvaluation?.confidence_score ?? null,
+        confidenceLabel: verifierEvaluation?.confidence_label ?? null,
       },
     };
 
     const encoder = new TextEncoder();
 
-    // Stream the final answer as SSE to maintain compatibility
     const stream = new ReadableStream({
       start(controller) {
-        // Send metadata header
         const header = JSON.stringify(pipelineMetadata) + "\n---STREAM_START---\n";
         controller.enqueue(encoder.encode(header));
 
-        // Send final answer as SSE chunks (simulate streaming for consistent UX)
         const chunkSize = 20;
         for (let i = 0; i < finalAnswer.length; i += chunkSize) {
           const textChunk = finalAnswer.slice(i, i + chunkSize);

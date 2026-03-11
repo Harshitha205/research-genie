@@ -6,7 +6,7 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { RAGPipelineStatus } from "@/components/RAGPipelineStatus";
 import { DocumentPanel } from "@/components/DocumentPanel";
-import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource, type PipelineInfo, type CriticInfo } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage as ChatMsg, type RetrievedSource, type PipelineInfo, type CriticInfo, type VerifierInfo } from "@/lib/chat-stream";
 import { type ProcessedDocument } from "@/lib/document-processor";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,7 +27,8 @@ export default function Index() {
   const [latestSources, setLatestSources] = useState<RetrievedSource[]>([]);
   const [pipelineInfo, setPipelineInfo] = useState<PipelineInfo | null>(null);
   const [criticInfo, setCriticInfo] = useState<CriticInfo | null>(null);
-  const [pipelineStage, setPipelineStage] = useState<"idle" | "retrieving" | "generating" | "critiquing" | "done">("idle");
+  const [verifierInfo, setVerifierInfo] = useState<VerifierInfo | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<"idle" | "retrieving" | "generating" | "critiquing" | "verifying" | "done">("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function Index() {
     setLatestSources([]);
     setPipelineInfo(null);
     setCriticInfo(null);
-    setPipelineStage("retrieving");
+    setVerifierInfo(null);
 
     let assistantContent = "";
     const upsert = (chunk: string) => {
@@ -67,15 +68,16 @@ export default function Index() {
       },
       onPipeline: (info) => {
         setPipelineInfo(info);
-        // The backend does retrieve → generate → critique before streaming,
-        // so when we get the metadata, all steps are done
         setPipelineStage("critiquing");
       },
       onCritic: (info) => {
         setCriticInfo(info);
+        setPipelineStage("verifying");
+      },
+      onVerifier: (info) => {
+        setVerifierInfo(info);
       },
       onDelta: (chunk) => {
-        // Once we receive the first token, the critique is done
         if (pipelineStage !== "done") setPipelineStage("done");
         upsert(chunk);
       },
@@ -103,6 +105,7 @@ export default function Index() {
     setLatestSources([]);
     setPipelineInfo(null);
     setCriticInfo(null);
+    setVerifierInfo(null);
     setPipelineStage("idle");
   };
 
@@ -176,7 +179,7 @@ export default function Index() {
                 {/* Pipeline + Critic Status */}
                 {pipelineStage !== "idle" && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <RAGPipelineStatus pipeline={pipelineInfo} critic={criticInfo} isLoading={isLoading} stage={pipelineStage} />
+                    <RAGPipelineStatus pipeline={pipelineInfo} critic={criticInfo} verifier={verifierInfo} isLoading={isLoading} stage={pipelineStage} />
                   </motion.div>
                 )}
 
