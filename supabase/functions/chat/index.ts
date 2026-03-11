@@ -7,6 +7,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+async function callAI(apiKey: string, messages: any[], stream = false) {
+  const response = await fetch(AI_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages,
+      stream,
+    }),
+  });
+
+  if (!response.ok) {
+    const status = response.status;
+    if (status === 429) throw { status: 429, message: "Rate limit exceeded. Please try again in a moment." };
+    if (status === 402) throw { status: 402, message: "AI usage limit reached. Please add credits." };
+    const t = await response.text();
+    console.error("AI gateway error:", status, t);
+    throw { status: 500, message: "AI service error" };
+  }
+
+  return response;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -19,7 +47,7 @@ serve(async (req) => {
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     if (!lastUserMsg) throw new Error("No user message found");
 
-    // ── STEP 2: Retrieve relevant document chunks from vector database ──
+    // ── STEP 2: Retrieve relevant chunks ──
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -30,9 +58,7 @@ serve(async (req) => {
       match_limit: 5,
     });
 
-    if (searchError) {
-      console.error("Retrieval error:", searchError);
-    }
+    if (searchError) console.error("Retrieval error:", searchError);
 
     const hasContext = chunks && chunks.length > 0;
 
@@ -47,46 +73,109 @@ serve(async (req) => {
         }))
       : [];
 
-    // ── STEP 3: Provide retrieved context to the LLM ──
     const contextBlock = hasContext
       ? chunks.map((c: any, i: number) => {
           const type = c.source_type === "url" ? "Web" : "Document";
           const url = c.source_url ? ` | URL: ${c.source_url}` : "";
-          return `### Source [${i + 1}]\n- **Name:** ${c.file_name}\n- **Type:** ${type}${url}\n- **Location:** Chunk ${c.chunk_index + 1}\n- **Relevance Score:** ${(c.rank * 100).toFixed(1)}%\n\n**Content:**\n${c.content}`;
+          return `### Source [${i + 1}]\n- **Name:** ${c.file_name}\n- **Type:** ${type}${url}\n- **Location:** Chunk ${c.chunk_index + 1}\n\n**Content:**\n${c.content}`;
         }).join("\n\n---\n\n")
       : "";
 
-    // ── STEP 4: Generate response based ONLY on retrieved context ──
-    const systemPrompt = `You are a Retrieval-Augmented Generation (RAG) research assistant. You MUST follow these rules strictly:
+    // ── STEP 3: Generate initial RAG response (non-streaming) ──
+    const ragSystemPrompt = `You are a RAG research assistant. Answer ONLY from the retrieved context. Never use pre-trained knowledge for factual claims.
 
-## CRITICAL RULES
-1. **Answer ONLY from the retrieved context below.** Do NOT use your pre-trained knowledge to answer factual questions.
-2. **If no relevant context is retrieved**, clearly state: "I could not find relevant information in the knowledge base. Please upload documents or add web URLs related to your question."
-3. **Never fabricate or hallucinate information** not present in the retrieved context.
+## RULES
+- If no context is retrieved, say so clearly.
+- Cite every claim with [Source N].
+- Include a ## Citations section and ## Confidence level (High/Medium/Low/None).
 
-## CITATION RULES
-- Every claim MUST include an inline citation using the format [Source N] where N matches the source index.
-- When synthesizing across sources, cite all relevant sources: [Source 1][Source 3].
-- Direct quotes must use quotation marks with citation: "exact text" [Source 2].
+${hasContext ? `## RETRIEVED CONTEXT (${retrievedSources.length} chunks)\n\n${contextBlock}` : "## NO CONTEXT RETRIEVED"}`;
 
-## RESPONSE FORMAT
-Structure your response as:
+    const initialResponse = await callAI(LOVABLE_API_KEY, [
+      { role: "system", content: ragSystemPrompt },
+      ...messages,
+    ], false);
 
-1. **Answer** — A clear, well-structured answer with inline citations [Source N]
-2. **## Citations** — A numbered list of all sources used:
-   - [Source 1] Document/Web: name, location
-   - [Source 2] Document/Web: name, location
-3. **## Confidence** — State your confidence level:
-   - **High**: Multiple sources corroborate the answer
-   - **Medium**: Answer from a single source or partial match
-   - **Low**: Tangential relevance only
-   - **None**: No relevant context found
+    const initialData = await initialResponse.json();
+    const initialAnswer = initialData.choices?.[0]?.message?.content || "";
 
-${hasContext
-  ? `## RETRIEVED CONTEXT (${retrievedSources.length} chunks)\n\n${contextBlock}`
-  : "## NO CONTEXT RETRIEVED\nThe knowledge base returned no matching documents for this query."}`;
+    // ── STEP 4: Critic Agent reviews the response ──
+    const criticPrompt = `You are a Critic Agent. Your job is to review an AI-generated research response and improve it.
 
-    // Build metadata header
+## THE USER'S QUESTION
+${lastUserMsg.content}
+
+## THE AI'S DRAFT RESPONSE
+${initialAnswer}
+
+${hasContext ? `## THE RETRIEVED CONTEXT THAT WAS AVAILABLE\n\n${contextBlock}` : "No context was retrieved."}
+
+## YOUR TASK
+Evaluate the draft response on these criteria:
+
+1. **Logical Consistency** — Are there contradictions, non-sequiturs, or flawed reasoning?
+2. **Question Answering** — Does it actually answer the user's question fully and directly?
+3. **Clarity** — Is the language clear, well-organized, and easy to follow?
+4. **Completeness** — Does it use all relevant information from the retrieved context?
+5. **Citation Accuracy** — Are citations correctly placed and do they match the actual source content?
+
+## OUTPUT FORMAT
+You MUST output your response in this exact format:
+
+---CRITIQUE_START---
+{
+  "issues_found": true/false,
+  "evaluation": {
+    "logical_consistency": { "score": 1-5, "note": "..." },
+    "answers_question": { "score": 1-5, "note": "..." },
+    "clarity": { "score": 1-5, "note": "..." },
+    "completeness": { "score": 1-5, "note": "..." },
+    "citation_accuracy": { "score": 1-5, "note": "..." }
+  },
+  "overall_score": 1-5,
+  "summary": "Brief summary of issues found or quality assessment"
+}
+---CRITIQUE_END---
+
+If issues_found is true OR overall_score < 4, then ALSO output an improved response after the critique block:
+
+---IMPROVED_START---
+[Your improved, rewritten response here — follow the same format rules: citations, ## Citations section, ## Confidence level]
+---IMPROVED_END---
+
+If the response is already good (overall_score >= 4 and no issues), do NOT output the improved section.`;
+
+    const criticResponse = await callAI(LOVABLE_API_KEY, [
+      { role: "system", content: "You are a meticulous Critic Agent that evaluates and improves AI responses." },
+      { role: "user", content: criticPrompt },
+    ], false);
+
+    const criticData = await criticResponse.json();
+    const criticOutput = criticData.choices?.[0]?.message?.content || "";
+
+    // Parse critic output
+    let criticEvaluation: any = null;
+    let finalAnswer = initialAnswer;
+    let wasImproved = false;
+
+    // Extract critique JSON
+    const critiqueMatch = criticOutput.match(/---CRITIQUE_START---\s*([\s\S]*?)\s*---CRITIQUE_END---/);
+    if (critiqueMatch) {
+      try {
+        criticEvaluation = JSON.parse(critiqueMatch[1].trim());
+      } catch {
+        console.error("Failed to parse critic evaluation");
+      }
+    }
+
+    // Extract improved response if present
+    const improvedMatch = criticOutput.match(/---IMPROVED_START---\s*([\s\S]*?)\s*---IMPROVED_END---/);
+    if (improvedMatch && improvedMatch[1].trim().length > 50) {
+      finalAnswer = improvedMatch[1].trim();
+      wasImproved = true;
+    }
+
+    // ── STEP 5: Stream the final response to the client ──
     const pipelineMetadata = {
       retrievedSources,
       pipeline: {
@@ -94,70 +183,46 @@ ${hasContext
         chunksRetrieved: retrievedSources.length,
         hasContext,
       },
+      critic: {
+        evaluation: criticEvaluation,
+        wasImproved,
+        originalLength: initialAnswer.length,
+        finalLength: finalAnswer.length,
+      },
     };
 
-    const sourceHeader = JSON.stringify(pipelineMetadata) + "\n---STREAM_START---\n";
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI usage limit reached. Please add credits." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const encoder = new TextEncoder();
-    const aiBody = response.body!;
 
-    const combinedStream = new ReadableStream({
-      async start(controller) {
-        controller.enqueue(encoder.encode(sourceHeader));
-        const reader = aiBody.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
-          }
-        } finally {
-          controller.close();
+    // Stream the final answer as SSE to maintain compatibility
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send metadata header
+        const header = JSON.stringify(pipelineMetadata) + "\n---STREAM_START---\n";
+        controller.enqueue(encoder.encode(header));
+
+        // Send final answer as SSE chunks (simulate streaming for consistent UX)
+        const chunkSize = 20;
+        for (let i = 0; i < finalAnswer.length; i += chunkSize) {
+          const textChunk = finalAnswer.slice(i, i + chunkSize);
+          const sseData = JSON.stringify({
+            choices: [{ delta: { content: textChunk } }],
+          });
+          controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
         }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
       },
     });
 
-    return new Response(combinedStream, {
+    return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const status = e?.status || 500;
+    const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
+    return new Response(JSON.stringify({ error: message }), {
+      status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
