@@ -1,73 +1,39 @@
-# Welcome to your Lovable project
+# 🚀 Research Genie  
+### AI-Powered Research Assistant using LLMs & RAG
 
-## Project info
+## 📌 Overview  
+**Research Genie** is an intelligent AI-based application designed to simplify and accelerate the research process. It leverages **Large Language Models (LLMs)** and **Retrieval-Augmented Generation (RAG)** techniques to fetch, process, and generate accurate, context-aware research insights.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+The system helps users quickly extract meaningful information from large datasets, research papers, or documents, making it ideal for students, developers, and researchers.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## ✨ Features  
+- 🔍 Intelligent document search and retrieval  
+- 🤖 Context-aware answers using LLMs  
+- 📄 Research paper summarization  
+- 🧠 Semantic understanding of queries  
+- ⚡ Fast and scalable processing  
+- 📊 Clean and interactive user interface  
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 🛠️ Tech Stack  
+- **Frontend:** React.js / HTML / CSS  
+- **Backend:** Node.js / FastAPI (if used)  
+- **AI/ML:** Python, LLMs, NLP  
+- **Database:** MongoDB / Vector DB (FAISS / Pinecone)  
+- **Other Tools:** Git, Docker (optional), APIs  
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## ⚙️ How It Works  
+1. User submits a query  
+2. System retrieves relevant documents using embeddings  
+3. Applies RAG pipeline  
+4. LLM generates accurate, contextual response  
+5. Results are displayed in a user-friendly format  
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 📂 Project Structure  
