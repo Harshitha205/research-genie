@@ -19,11 +19,25 @@ The system helps users quickly extract meaningful information from large dataset
 ---
 
 ## 🛠️ Tech Stack  
-- **Frontend:** React.js / HTML / CSS  
-- **Backend:** Node.js / FastAPI (if used)  
-- **AI/ML:** Python, LLMs, NLP  
-- **Database:** MongoDB / Vector DB (FAISS / Pinecone)  
-- **Other Tools:** Git, Docker (optional), APIs  
+
+### Frontend  
+- React.js (with Vite)  
+- TypeScript  
+- Tailwind CSS  
+- ShadCN UI  
+
+### Backend & Database  
+- Supabase (Backend-as-a-Service)  
+- PostgreSQL  
+
+### AI/ML  
+- LLM Integration (RAG-based pipeline)  
+- NLP techniques  
+
+### Testing & Tools  
+- Playwright (for testing)  
+- ESLint (code quality)  
+- Git & GitHub  
 
 ---
 
